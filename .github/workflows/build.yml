@@ -1,0 +1,57 @@
+name: Build
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+      - develop
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Release
+  # TODO: eventually should set the PICO_SDK_PATH here
+  # PICO_SDK_PATH: ${{ github.workspace }}/pico-sdk
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Clean workspace
+      run: |
+        echo "Cleaning up previous run"
+        rm -rf "${{ github.workspace }}"
+        mkdir -p "${{ github.workspace }}"
+    - name: Checkout PicoCart64
+      uses: actions/checkout@v2
+      with:
+        path: picocart64
+    - name: Checkout pico-sdk/develop
+      uses: actions/checkout@v2
+      with:
+        repository: raspberrypi/pico-sdk
+        ref: develop
+        path: pico-sdk
+    - name: Checkout pico-sdk submodules
+      working-directory: ${{github.workspace}}/pico-sdk
+      run: git submodule update --init
+    - name: Install build dependencies
+      run: sudo apt-get install -y gcc-arm-none-eabi
+    - name: Fetch controller test ROM
+      run: |
+        curl -s https://api.github.com/repos/ryzee119/n64_controller_test/releases/latest \
+        | grep /main.z64 \
+        | grep "browser_download_url.*z64" \
+        | cut -d : -f 2,3 | tr -d \" \
+        | wget -qi -
+    - name: Prepare test ROM for build
+      run: xxd -i main.z64 > picocart64/sw/cic_test/rom.h
+    - name: Build PicoCart64
+      run: |
+        export PICO_SDK_PATH=${{ github.workspace }}/pico-sdk
+        mkdir picocart64/sw/build
+        cd picocart64/sw/build
+        cmake ..
+        make
+    
